@@ -16,22 +16,21 @@ use Time::HiRes qw(sleep);
 
 use constant PATH_SEP => $^O eq 'MSWin32' ? ';' : ':';
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 our %Defaults = (
-    auto_start         => 1,
-    pid                => undef,
-    listen             => undef,
-    required_modules   => [],
-    server_root        => undef,
-    tmpdir             => undef,
-    custom_conf        => '',
-    search_paths       => [
+    auto_start       => 1,
+    pid              => undef,
+    listen           => undef,
+    required_modules => [],
+    server_root      => undef,
+    tmpdir           => undef,
+    custom_conf      => '',
+    search_paths     => [
         qw(/usr/sbin /usr/local/sbin /usr/local/apache/bin)
     ],
-    httpd              => 'httpd',
-    apxs               => 'apxs',
-    _fallback_dso_path => '',
+    httpd            => 'httpd',
+    apxs             => 'apxs',
 );
 
 if ($^O eq 'MSWin32') {
@@ -46,7 +45,8 @@ if ($^O eq 'MSWin32') {
         my $dso_path = $path;
         $dso_path =~ s!/bin$!/modules!;
         if (-d $dso_path) {
-            $Defaults{_fallback_dso_path} = $dso_path;
+            # convert to shortname since SPs in path will let the glob fail
+            $Defaults{_dso_path} = Win32::GetShortPathName($dso_path);
         }
     }
 } else {
@@ -179,6 +179,7 @@ PidFile @{[$self->tmpdir]}/httpd.pid
 <IfModule !mpm_winnt_module>
   LockFile @{[$self->tmpdir]}/httpd.lock
 </IfModule>
+@{[ $^O ne 'MSWin32' && $< == 0 ? "User nobody" : ()]}
 ErrorLog @{[$self->tmpdir]}/error_log
 Listen @{[$self->listen]}
 $load_modules
@@ -237,14 +238,8 @@ sub get_dso_path {
             my $path;
             if (my $lines = $self->_read_cmd($self->apxs, '-q', 'LIBEXECDIR')) {
                 $path = (split /\n/, $lines)[0];
-            } elsif ($path = $self->_fallback_dso_path) {
-                warn "failed to obtain LIBEXECDIR from apxs, falling back to @{[$self->_fallback_dso_path]}";
             } else {
                 die "failed to determine the apache modules directory";
-            }
-            # convert to shortname since SPs in path will let the glob fail
-            if ($^O eq 'MSWin32') {
-                $path = Win32::GetShortPathName($path);
             }
             return $path;
         }->();
@@ -353,6 +348,11 @@ the instance method stops the httpd server
 =head1 COPYRIGHT
 
 Copyright (C) 2010 Cybozu Labs, Inc.  Written by Kazuho Oku.
+
+=head1 THANKS TO
+
+Tatsuhiko Miyagawa
+mattn
 
 =head1 LICENSE
 
